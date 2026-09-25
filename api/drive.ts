@@ -14,7 +14,7 @@ function getSupabase() {
   return createClient(supabaseUrl, supabaseKey);
 }
 
-export function getDrive() {
+function getDrive() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
