@@ -22,7 +22,7 @@ function getDrive() {
   if (!clientId || !clientSecret || !refreshToken) {
     throw new Error('系统缺少 Google OAuth2 配置环境变量');
   }
-
+  
   const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
   oauth2Client.setCredentials({ refresh_token: refreshToken });
 
