@@ -24,8 +24,8 @@ const cards = [
   },
   {
     id: 'series' as TeacherPage,
-    title: '学房系列与课程内容管理',
-    description: '管理学房系列与课程内容',
+    title: '学房课程内容管理',
+    description: '管理学房课程内容',
     icon: BookOpenText,
     color: 'text-teal-600',
     bg: 'bg-teal-50',
@@ -45,17 +45,22 @@ const cards = [
 export function TeacherHome({ onNavigate, onLogout }: TeacherHomeProps) {
   const { show } = useToast();
   const [currentSem, setCurrentSem] = useState<number>(SERIES_SEMS[0]);
+  const [currentYear, setCurrentYear] = useState<number>(new Date().getFullYear());
 
   useEffect(() => {
-    async function fetchCurrentSem() {
+    async function fetchSettings() {
       const { data } = await supabase
         .from('app_settings')
-        .select('current_sem')
+        .select('current_sem, current_year')
         .eq('id', 'default')
         .single();
-      if (data) setCurrentSem(data.current_sem);
+
+      if (data) {
+        if (data.current_sem) setCurrentSem(data.current_sem);
+        if (data.current_year) setCurrentYear(data.current_year);
+      }
     }
-    void fetchCurrentSem();
+    void fetchSettings();
   }, []);
 
   async function handleSemChange(value: number) {
@@ -65,11 +70,29 @@ export function TeacherHome({ onNavigate, onLogout }: TeacherHomeProps) {
       .from('app_settings')
       .update({ current_sem: value, updated_at: new Date().toISOString() })
       .eq('id', 'default');
+
     if (error) {
       setCurrentSem(previousSem);
       show('无法更新当前学期', 'error');
     } else {
       show(`当前学期已切换为第 ${value} 学期`);
+    }
+  }
+
+  async function handleYearChange(value: number) {
+    if (!value) return;
+    const previousYear = currentYear;
+    setCurrentYear(value);
+    const { error } = await supabase
+      .from('app_settings')
+      .update({ current_year: value, updated_at: new Date().toISOString() })
+      .eq('id', 'default');
+
+    if (error) {
+      setCurrentYear(previousYear);
+      show('无法更新当前年份', 'error');
+    } else {
+      show(`当前年份已切换为 ${value} 年`);
     }
   }
 
@@ -87,18 +110,33 @@ export function TeacherHome({ onNavigate, onLogout }: TeacherHomeProps) {
         <p className="text-slate-500 mt-1.5">请选择一项管理内容</p>
       </div>
 
-      <label className="mb-6 flex items-center gap-3 text-sm font-medium text-slate-700">
-        当前学期
-        <select
-          value={currentSem}
-          onChange={(e) => { void handleSemChange(Number(e.target.value)); }}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-800 shadow-sm focus:border-sky-500 focus:outline-none"
-        >
-          {SERIES_SEMS.map((sem) => (
-            <option key={sem} value={sem}>第 {sem} 学期</option>
-          ))}
-        </select>
-      </label>
+      <div className="mb-8 flex flex-wrap items-center justify-center gap-6 bg-white/80 backdrop-blur-sm px-6 py-3 rounded-2xl border border-slate-200/80 shadow-sm">
+        {/* 当前年份：改用带有上下箭头的 number 数字输入框 */}
+        <label className="flex items-center gap-2.5 text-sm font-medium text-slate-700">
+          <span>当前年份</span>
+          <input
+            type="number"
+            value={currentYear}
+            onChange={(e) => { void handleYearChange(Number(e.target.value)); }}
+            className="w-24 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-800 shadow-sm focus:border-sky-500 focus:outline-none"
+          />
+        </label>
+
+        <div className="h-4 w-px bg-slate-200 hidden sm:block" />
+
+        <label className="flex items-center gap-2.5 text-sm font-medium text-slate-700">
+          <span>当前学期</span>
+          <select
+            value={currentSem}
+            onChange={(e) => { void handleSemChange(Number(e.target.value)); }}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-800 shadow-sm focus:border-sky-500 focus:outline-none"
+          >
+            {SERIES_SEMS.map((sem) => (
+              <option key={sem} value={sem}>第 {sem} 学期</option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full">
         {cards.map((card) => {
@@ -113,7 +151,6 @@ export function TeacherHome({ onNavigate, onLogout }: TeacherHomeProps) {
                 <Icon className={`w-6 h-6 ${card.color}`} />
               </div>
               <h2 className="text-lg font-semibold text-slate-800 mb-1">{card.title}</h2>
-              {/*<p className="text-sm text-slate-500 leading-relaxed">{card.description}</p>*/}
             </button>
           );
         })}
