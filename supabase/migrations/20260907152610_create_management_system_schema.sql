@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.series (
   created_at timestamptz DEFAULT now()
 );
 
+ALTER TABLE public.series ADD COLUMN IF NOT EXISTS series_year int NOT NULL DEFAULT EXTRACT(YEAR FROM CURRENT_DATE);
 ALTER TABLE public.series ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "anon_select_series" ON public.series;
@@ -49,19 +50,21 @@ USING (true);
 
 CREATE TABLE IF NOT EXISTS public.app_settings (
   id text PRIMARY KEY,
-  current_sem int NOT NULL DEFAULT 1
-    CHECK (current_sem IN (1,2,3)),
+  current_sem int NOT NULL DEFAULT 1 CHECK (current_sem IN (1, 2, 3)),
+  current_year int NOT NULL DEFAULT (EXTRACT(YEAR FROM now())::int), 
   updated_at timestamptz DEFAULT now()
 );
 
-INSERT INTO public.app_settings (id, current_sem)
-VALUES ('default', 1)
-ON CONFLICT (id) DO NOTHING;
+ALTER TABLE public.app_settings 
+ADD COLUMN IF NOT EXISTS current_year int NOT NULL DEFAULT (EXTRACT(YEAR FROM now())::int);
+
+ALTER TABLE public.app_settings 
+ALTER COLUMN current_year SET DEFAULT (EXTRACT(YEAR FROM now())::int);
 
 ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "anon_select_app_settings" ON public.app_settings;
-DROP POLICY IF EXISTS "anon_update_app_settings" ON public.app_settings;
+DROP POLICY IF EXISTS "anon_select_app_settings" ON public.ings;
+DROP POLICY IF EXISTS "anon_update_ings" ON public.app_settings;
 
 CREATE POLICY "anon_select_app_settings"
 ON public.app_settings
