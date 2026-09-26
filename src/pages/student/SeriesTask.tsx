@@ -31,9 +31,11 @@ export function SeriesTask({ student, onBack, onLogout }: SeriesTaskProps) {
 
     const { data: settingsData, error: settingsError } = await supabase
       .from('app_settings')
-      .select('current_sem')
+      .select('current_year, current_sem')
       .eq('id', 'default')
       .single();
+
+    const year = settingsData?.current_year || new Date().getFullYear();
 
     const semester = settingsData?.current_sem || SERIES_SEMS[0];
 
@@ -42,6 +44,7 @@ export function SeriesTask({ student, onBack, onLogout }: SeriesTaskProps) {
       .from('series')
       .select('*')
       .in('series_type', student.series_types || [])
+      .eq('series_year', year)
       .eq('series_sem', semester)
       .order('series_type', { ascending: true })
       .order('series_sem', { ascending: true })
@@ -72,8 +75,6 @@ export function SeriesTask({ student, onBack, onLogout }: SeriesTaskProps) {
     const sortedSeries = [...(seriesData || [])].sort((first, second) => {
       const typeComparison = first.series_type.localeCompare(second.series_type);
       if (typeComparison !== 0) return typeComparison;
-      const semesterComparison = first.series_sem - second.series_sem;
-      if (semesterComparison !== 0) return semesterComparison;
       return first.series_name.localeCompare(second.series_name, undefined, {
         numeric: true,
         sensitivity: 'base',
@@ -136,7 +137,6 @@ export function SeriesTask({ student, onBack, onLogout }: SeriesTaskProps) {
       return;
     }
     try {
-      // 传入 studentId 和 seriesId，让后端统一删除 Drive 文件并更新 Supabase 记录
       await deleteHomework(fileId, student.id, s.id);
 
       show('文件已删除');
@@ -215,7 +215,7 @@ export function SeriesTask({ student, onBack, onLogout }: SeriesTaskProps) {
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-teal-50 text-teal-600">
                                 {s.series_type}
                               </span>
-                              学期 {s.series_sem}
+                              {s.series_year} 第 {s.series_sem} 学期
                             </span>
                           </div>
                         </td>
