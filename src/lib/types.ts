@@ -1,6 +1,7 @@
 export interface Series {
   id: string;
   series_type: string;
+  series_year: number;
   series_sem: number;
   series_name: string;
   series_task: string;
