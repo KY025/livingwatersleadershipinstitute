@@ -25,7 +25,7 @@ export function getDrive() {
   const auth = new google.auth.JWT({
     email: clientEmail,
     key: privateKey,
-    scopes: ['https://www.googleapis.com/auth/drive'],
+    scopes: ['https://www.googleapis.com/auth/drive'], // 完整权限，以便转移所有权
   });
 
   return google.drive({ version: 'v3', auth });
@@ -65,7 +65,7 @@ async function getOrCreateStudentFolder(drive: any, rootFolderId: string, folder
   const folder = await drive.files.create({
     requestBody: folderMetadata,
     fields: 'id',
-    supportsAllDrives: true, 
+    supportsAllDrives: true,
   });
 
   return folder.data.id;
@@ -88,6 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+      const ownerEmail = process.env.GOOGLE_DRIVE_OWNER_EMAIL; // 你的个人谷歌账号邮箱
 
       if (!rootFolderId) {
         return res.status(500).json({ error: '系统缺少 GOOGLE_DRIVE_ROOT_FOLDER_ID 环境变量' });
@@ -108,17 +109,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const mediaStream = base64ToStream(fileData);
 
+      // 1. 上传文件到文件夹
       const driveRes = await drive.files.create({
         requestBody: {
           name: fileName,
-          parents: [targetFolderId], 
+          parents: [targetFolderId],
         },
         media: {
           mimeType: fileType || 'application/octet-stream',
           body: mediaStream,
         },
         fields: 'id, name, webViewLink',
-        supportsAllDrives: true, 
+        supportsAllDrives: true,
       });
 
       const uploadedFileId = driveRes.data.id;
@@ -126,6 +128,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (!uploadedFileId) {
         return res.status(500).json({ error: '上传失败，未获取到 fileId' });
+      }
+
+      if (ownerEmail) {
+        try {
+          await drive.permissions.create({
+            fileId: uploadedFileId,
+            transferOwnership: true,
+            requestBody: {
+              role: 'owner',
+              type: 'user',
+              emailAddress: ownerEmail,
+            },
+            supportsAllDrives: true,
+          });
+        } catch (transferError) {
+          console.warn('所有权转移失败，文件仍保留在共享空间:', transferError);
+        }
       }
 
       await drive.permissions.create({
