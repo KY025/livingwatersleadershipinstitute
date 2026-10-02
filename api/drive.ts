@@ -14,19 +14,21 @@ function getSupabase() {
   return createClient(supabaseUrl, supabaseKey);
 }
 
-function getDrive() {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
+export function getDrive() {
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
-  if (!clientId || !clientSecret || !refreshToken) {
-    throw new Error('系统缺少 Google OAuth2 配置环境变量');
+  if (!clientEmail || !privateKey) {
+    throw new Error('系统缺少 Google Service Account 配置环境变量');
   }
-  
-  const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
-  oauth2Client.setCredentials({ refresh_token: refreshToken });
 
-  return google.drive({ version: 'v3', auth: oauth2Client });
+  const auth = new google.auth.JWT({
+    email: clientEmail,
+    key: privateKey,
+    scopes: ['https://www.googleapis.com/auth/drive.file'],
+  });
+
+  return google.drive({ version: 'v3', auth });
 }
 
 function base64ToStream(base64Data: string): Readable {
@@ -46,6 +48,8 @@ async function getOrCreateStudentFolder(drive: any, rootFolderId: string, folder
     q: query,
     fields: 'files(id, name)',
     spaces: 'drive',
+    supportsAllDrives: true,          
+    includeItemsFromAllDrives: true,
   });
 
   if (searchRes.data.files && searchRes.data.files.length > 0) {
@@ -61,6 +65,7 @@ async function getOrCreateStudentFolder(drive: any, rootFolderId: string, folder
   const folder = await drive.files.create({
     requestBody: folderMetadata,
     fields: 'id',
+    supportsAllDrives: true,            、
   });
 
   return folder.data.id;
