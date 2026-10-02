@@ -65,7 +65,7 @@ async function getOrCreateStudentFolder(drive: any, rootFolderId: string, folder
   const folder = await drive.files.create({
     requestBody: folderMetadata,
     fields: 'id',
-    supportsAllDrives: true,            、
+    supportsAllDrives: true,           
   });
 
   return folder.data.id;
