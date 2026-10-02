@@ -25,7 +25,7 @@ export function getDrive() {
   const auth = new google.auth.JWT({
     email: clientEmail,
     key: privateKey,
-    scopes: ['https://www.googleapis.com/auth/drive.file'],
+    scopes: ['https://www.googleapis.com/auth/drive'],
   });
 
   return google.drive({ version: 'v3', auth });
@@ -65,7 +65,7 @@ async function getOrCreateStudentFolder(drive: any, rootFolderId: string, folder
   const folder = await drive.files.create({
     requestBody: folderMetadata,
     fields: 'id',
-    supportsAllDrives: true,           
+    supportsAllDrives: true, 
   });
 
   return folder.data.id;
@@ -89,33 +89,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
 
+      if (!rootFolderId) {
+        return res.status(500).json({ error: '系统缺少 GOOGLE_DRIVE_ROOT_FOLDER_ID 环境变量' });
+      }
+
       let targetFolderId = rootFolderId;
 
-      if (rootFolderId) {
-        const sName = studentName ? studentName.trim() : `Student_${studentId}`;
-        const sEmail = studentEmail ? studentEmail.trim() : '';
-        const folderName = sEmail ? `${sName} (${sEmail})` : sName;
-        
-        targetFolderId = await getOrCreateStudentFolder(drive, rootFolderId, folderName);
+      const sName = studentName ? studentName.trim() : `Student_${studentId}`;
+      const sEmail = studentEmail ? studentEmail.trim() : '';
+      const folderName = sEmail ? `${sName} (${sEmail})` : sName;
+      
+      targetFolderId = await getOrCreateStudentFolder(drive, rootFolderId, folderName);
 
-        await supabase
-          .from('students')
-          .update({ drive_folder_id: targetFolderId })
-          .eq('id', studentId);
-      }
+      await supabase
+        .from('students')
+        .update({ drive_folder_id: targetFolderId })
+        .eq('id', studentId);
 
       const mediaStream = base64ToStream(fileData);
 
       const driveRes = await drive.files.create({
         requestBody: {
           name: fileName,
-          parents: targetFolderId ? [targetFolderId] : undefined,
+          parents: [targetFolderId], 
         },
         media: {
           mimeType: fileType || 'application/octet-stream',
           body: mediaStream,
         },
         fields: 'id, name, webViewLink',
+        supportsAllDrives: true, 
       });
 
       const uploadedFileId = driveRes.data.id;
@@ -131,6 +134,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           role: 'reader',
           type: 'anyone',
         },
+        supportsAllDrives: true,
       });
 
       if (seriesId) {
@@ -178,7 +182,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: '缺少 fileId' });
       }
 
-      await drive.files.delete({ fileId });
+      await drive.files.delete({ 
+        fileId,
+        supportsAllDrives: true,
+      });
 
       if (studentId && seriesId) {
         const { data: existingRecord } = await supabase
