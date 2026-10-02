@@ -14,21 +14,27 @@ function getSupabase() {
   return createClient(supabaseUrl, supabaseKey);
 }
 
+// 恢复为 OAuth2 鉴权方式
 export function getDrive() {
-  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN;
 
-  if (!clientEmail || !privateKey) {
-    throw new Error('系统缺少 Google Service Account 配置环境变量');
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error('系统缺少 Google OAuth 配置环境变量');
   }
 
-  const auth = new google.auth.JWT({
-    email: clientEmail,
-    key: privateKey,
-    scopes: ['https://www.googleapis.com/auth/drive'], // 完整权限，以便转移所有权
+  const oauth2Client = new google.auth.OAuth2(
+    clientId,
+    clientSecret,
+    'https://developers.google.com/oauthplayground'
+  );
+
+  oauth2Client.setCredentials({
+    refresh_token: refreshToken,
   });
 
-  return google.drive({ version: 'v3', auth });
+  return google.drive({ version: 'v3', auth: oauth2Client });
 }
 
 function base64ToStream(base64Data: string): Readable {
@@ -48,8 +54,6 @@ async function getOrCreateStudentFolder(drive: any, rootFolderId: string, folder
     q: query,
     fields: 'files(id, name)',
     spaces: 'drive',
-    supportsAllDrives: true,          
-    includeItemsFromAllDrives: true,
   });
 
   if (searchRes.data.files && searchRes.data.files.length > 0) {
@@ -65,7 +69,6 @@ async function getOrCreateStudentFolder(drive: any, rootFolderId: string, folder
   const folder = await drive.files.create({
     requestBody: folderMetadata,
     fields: 'id',
-    supportsAllDrives: true,
   });
 
   return folder.data.id;
@@ -88,19 +91,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
-      const ownerEmail = process.env.GOOGLE_DRIVE_OWNER_EMAIL; // 你的个人谷歌账号邮箱
 
       if (!rootFolderId) {
         return res.status(500).json({ error: '系统缺少 GOOGLE_DRIVE_ROOT_FOLDER_ID 环境变量' });
       }
 
-      let targetFolderId = rootFolderId;
-
       const sName = studentName ? studentName.trim() : `Student_${studentId}`;
       const sEmail = studentEmail ? studentEmail.trim() : '';
       const folderName = sEmail ? `${sName} (${sEmail})` : sName;
       
-      targetFolderId = await getOrCreateStudentFolder(drive, rootFolderId, folderName);
+      const targetFolderId = await getOrCreateStudentFolder(drive, rootFolderId, folderName);
 
       await supabase
         .from('students')
@@ -109,7 +109,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const mediaStream = base64ToStream(fileData);
 
-      // 1. 上传文件到文件夹
       const driveRes = await drive.files.create({
         requestBody: {
           name: fileName,
@@ -120,7 +119,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           body: mediaStream,
         },
         fields: 'id, name, webViewLink',
-        supportsAllDrives: true,
       });
 
       const uploadedFileId = driveRes.data.id;
@@ -130,30 +128,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(500).json({ error: '上传失败，未获取到 fileId' });
       }
 
-      if (ownerEmail) {
-        try {
-          await drive.permissions.create({
-            fileId: uploadedFileId,
-            transferOwnership: true,
-            requestBody: {
-              role: 'owner',
-              type: 'user',
-              emailAddress: ownerEmail,
-            },
-            supportsAllDrives: true,
-          });
-        } catch (transferError) {
-          console.warn('所有权转移失败，文件仍保留在共享空间:', transferError);
-        }
-      }
-
       await drive.permissions.create({
         fileId: uploadedFileId,
         requestBody: {
           role: 'reader',
           type: 'anyone',
         },
-        supportsAllDrives: true,
       });
 
       if (seriesId) {
@@ -201,10 +181,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: '缺少 fileId' });
       }
 
-      await drive.files.delete({ 
-        fileId,
-        supportsAllDrives: true,
-      });
+      await drive.files.delete({ fileId });
 
       if (studentId && seriesId) {
         const { data: existingRecord } = await supabase
